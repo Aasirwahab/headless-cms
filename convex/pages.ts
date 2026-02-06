@@ -200,9 +200,10 @@ export const updateMeta = mutation({
       if (user.role !== "admin") {
         throw new ConvexError("Only admins can change page slugs");
       }
+      const newSlug = args.slug; // Extract to const for type narrowing
       const existing = await ctx.db
         .query("pages")
-        .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+        .withIndex("by_slug", (q) => q.eq("slug", newSlug))
         .unique();
       if (existing) {
         throw new ConvexError(`Slug "${args.slug}" is already taken`);
