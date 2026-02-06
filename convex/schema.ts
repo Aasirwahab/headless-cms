@@ -173,4 +173,98 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_active", ["isActive"]),
+
+  // ── Projects (Portfolio Items) ───────────────────────────
+  projects: defineTable({
+    slug: v.string(), // URL-friendly identifier
+    title: v.string(),
+    location: v.optional(v.string()),
+    year: v.optional(v.string()),
+    category: v.optional(v.string()), // Residential, Commercial, etc.
+    description: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    // Extended project details
+    brief: v.optional(v.string()),
+    solution: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    size: v.optional(v.string()),
+    stage: v.optional(v.string()), // Completed, In Planning, Under Construction
+    constraints: v.optional(v.string()),
+    approach: v.optional(v.string()),
+    // Gallery images
+    gallery: v.optional(v.array(v.string())),
+    // Status
+    isPublished: v.boolean(),
+    order: v.optional(v.number()), // For custom ordering
+    createdBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_published", ["isPublished"])
+    .index("by_category", ["category"]),
+
+  // ── Services ─────────────────────────────────────────────
+  services: defineTable({
+    slug: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    deliverables: v.optional(v.array(v.string())),
+    timeline: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    isPublished: v.boolean(),
+    order: v.optional(v.number()),
+    createdBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_published", ["isPublished"]),
+
+  // ── Testimonials ─────────────────────────────────────────
+  testimonials: defineTable({
+    quote: v.string(),
+    author: v.string(),
+    project: v.optional(v.string()), // Project name or reference
+    role: v.optional(v.string()), // Author's role/title
+    avatar: v.optional(v.string()),
+    isPublished: v.boolean(),
+    order: v.optional(v.number()),
+    createdBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_published", ["isPublished"]),
+
+  // ── FAQs ─────────────────────────────────────────────────
+  faqs: defineTable({
+    question: v.string(),
+    answer: v.string(),
+    category: v.optional(v.string()),
+    isPublished: v.boolean(),
+    order: v.optional(v.number()),
+    createdBy: v.id("users"),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_published", ["isPublished"])
+    .index("by_category", ["category"]),
+
+  // ── Site Settings ────────────────────────────────────────
+  siteSettings: defineTable({
+    key: v.string(), // "general", "social", "contact", etc.
+    siteName: v.optional(v.string()),
+    tagline: v.optional(v.string()),
+    description: v.optional(v.string()),
+    logo: v.optional(v.string()),
+    favicon: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
+    address: v.optional(v.string()),
+    socialLinks: v.optional(v.object({
+      instagram: v.optional(v.string()),
+      twitter: v.optional(v.string()),
+      linkedin: v.optional(v.string()),
+      facebook: v.optional(v.string()),
+      youtube: v.optional(v.string()),
+    })),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_key", ["key"]),
 });

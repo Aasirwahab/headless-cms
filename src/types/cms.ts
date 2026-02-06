@@ -115,6 +115,89 @@ export type User = {
   role: UserRole;
 };
 
+// ── Project ────────────────────────────────────────────────
+export type Project = {
+  _id: Id<"projects">;
+  _creationTime: number;
+  slug: string;
+  title: string;
+  location?: string;
+  year?: string;
+  category?: string;
+  description?: string;
+  imageUrl?: string;
+  brief?: string;
+  solution?: string;
+  outcome?: string;
+  size?: string;
+  stage?: string;
+  constraints?: string;
+  approach?: string;
+  gallery?: string[];
+  isPublished: boolean;
+  order?: number;
+};
+
+// ── Service ────────────────────────────────────────────────
+export type Service = {
+  _id: Id<"services">;
+  _creationTime: number;
+  slug: string;
+  title: string;
+  description?: string;
+  deliverables?: string[];
+  timeline?: string;
+  icon?: string;
+  isPublished: boolean;
+  order?: number;
+};
+
+// ── Testimonial ──────────────────────────────────────────
+export type Testimonial = {
+  _id: Id<"testimonials">;
+  _creationTime: number;
+  quote: string;
+  author: string;
+  project?: string;
+  role?: string;
+  avatar?: string;
+  isPublished: boolean;
+  order?: number;
+};
+
+// ── FAQ ───────────────────────────────────────────────────
+export type FAQ = {
+  _id: Id<"faqs">;
+  _creationTime: number;
+  question: string;
+  answer: string;
+  category?: string;
+  isPublished: boolean;
+  order?: number;
+};
+
+// ── Site Settings ────────────────────────────────────────
+export type SiteSettings = {
+  _id: Id<"siteSettings">;
+  _creationTime: number;
+  key: string;
+  siteName?: string;
+  tagline?: string;
+  description?: string;
+  logo?: string;
+  favicon?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+  socialLinks?: {
+    instagram?: string;
+    twitter?: string;
+    linkedin?: string;
+    facebook?: string;
+    youtube?: string;
+  };
+};
+
 // ── Public Page Response (from getBySlug) ──────────────────
 export type PublicPage = {
   _id: Id<"pages">;
