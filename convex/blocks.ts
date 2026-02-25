@@ -84,6 +84,7 @@ export const addBlock = mutation({
     if (!page) throw new ConvexError("Page not found");
 
     const blockId = await ctx.db.insert("blocks", {
+      workspaceId: page.workspaceId,
       pageId: args.pageId,
       content: args.content,
       layout: args.layout,
@@ -220,6 +221,7 @@ export const duplicateBlock = mutation({
     if (!block) throw new ConvexError("Block not found");
 
     const newBlockId = await ctx.db.insert("blocks", {
+      workspaceId: block.workspaceId,
       pageId: block.pageId,
       content: block.content,
       layout: block.layout,
