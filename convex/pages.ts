@@ -139,6 +139,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx, args.token);
+    if (!admin.workspaceId) throw new ConvexError("Workspace not found");
 
     // Validate slug uniqueness
     const existing = await ctx.db
@@ -155,6 +156,7 @@ export const create = mutation({
     }
 
     const pageId = await ctx.db.insert("pages", {
+      workspaceId: admin.workspaceId,
       title: args.title,
       slug: args.slug,
       description: args.description,

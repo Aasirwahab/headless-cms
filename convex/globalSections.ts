@@ -101,6 +101,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx, args.token);
+    if (!admin.workspaceId) throw new ConvexError("Workspace not found");
 
     // If setting as default, unset existing defaults of same type
     if (args.isDefault) {
@@ -115,6 +116,7 @@ export const create = mutation({
     }
 
     const id = await ctx.db.insert("globalSections", {
+      workspaceId: admin.workspaceId,
       name: args.name,
       slug: args.slug,
       type: args.type,
