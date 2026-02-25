@@ -4,16 +4,10 @@ import { v } from "convex/values";
 // ============================================================
 // HEADLESS REAL-TIME CMS — CONVEX SCHEMA
 // ============================================================
-// This schema powers a multi-tenant, block-based CMS with:
-//   - Pages (slug-routed, draft/publish workflow)
-//   - Blocks (typed content units: hero, text, image, cta)
-//   - Global Sections (reusable header/footer/CTA blocks)
-//   - Users & Roles (admin vs editor with granular permissions)
-//   - Media library
-//   - Audit trail
+// Multi-workspace: every content table is scoped by workspaceId
+// so each registered admin sees only their own content.
 // ============================================================
 
-// Shared validator for block content — each block type has its own shape
 const blockContent = v.union(
   v.object({
     type: v.literal("hero"),
@@ -26,7 +20,7 @@ const blockContent = v.union(
   }),
   v.object({
     type: v.literal("text"),
-    body: v.string(), // Rich text stored as HTML or markdown
+    body: v.string(),
     maxLength: v.optional(v.number()),
   }),
   v.object({
@@ -48,20 +42,31 @@ const blockContent = v.union(
 );
 
 export default defineSchema({
+  // ── Workspaces ───────────────────────────────────────────
+  // Each admin gets one workspace on registration.
+  // All content is scoped to a workspaceId.
+  workspaces: defineTable({
+    name: v.string(),
+    ownerId: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+
   // ── Users & Authentication ──────────────────────────────
   users: defineTable({
     name: v.string(),
     email: v.string(),
-    passwordHash: v.string(), // bcrypt hash
+    passwordHash: v.string(),
     role: v.union(v.literal("admin"), v.literal("editor")),
+    workspaceId: v.optional(v.id("workspaces")), // set after workspace creation
     avatar: v.optional(v.string()),
     isActive: v.boolean(),
     lastLoginAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
-    .index("by_role", ["role"]),
+    .index("by_role", ["role"])
+    .index("by_workspace", ["workspaceId"]),
 
-  // ── Sessions (simple token-based auth) ──────────────────
+  // ── Sessions ─────────────────────────────────────────────
   sessions: defineTable({
     userId: v.id("users"),
     token: v.string(),
@@ -70,141 +75,138 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_user", ["userId"]),
 
-  // ── Pages ───────────────────────────────────────────────
-  // Each page has a slug, SEO metadata, and an ordered list of block refs.
-  // Draft/publish is handled via `status` + `publishedAt`.
+  // ── Pages ────────────────────────────────────────────────
   pages: defineTable({
+    workspaceId: v.id("workspaces"),
     title: v.string(),
     slug: v.string(),
     description: v.optional(v.string()),
     status: v.union(v.literal("draft"), v.literal("published"), v.literal("archived")),
-    // SEO metadata
     seo: v.object({
       title: v.optional(v.string()),
       description: v.optional(v.string()),
       ogImage: v.optional(v.string()),
       noIndex: v.optional(v.boolean()),
     }),
-    // Ordered block IDs — the page's content structure
     blockOrder: v.array(v.id("blocks")),
-    // Global sections attached to this page (header/footer overrides)
     headerOverride: v.optional(v.id("globalSections")),
     footerOverride: v.optional(v.id("globalSections")),
-    // Timestamps
     publishedAt: v.optional(v.number()),
     createdBy: v.id("users"),
     updatedBy: v.optional(v.id("users")),
   })
+    .index("by_workspace", ["workspaceId"])
     .index("by_slug", ["slug"])
     .index("by_status", ["status"])
-    .index("by_created", ["createdBy"]),
+    .index("by_workspace_status", ["workspaceId", "status"]),
 
-  // ── Blocks ──────────────────────────────────────────────
-  // Individual content blocks. Each block has a `type` that determines
-  // its content shape. Blocks belong to a page.
+  // ── Blocks ───────────────────────────────────────────────
   blocks: defineTable({
+    workspaceId: v.id("workspaces"),
     pageId: v.id("pages"),
     content: blockContent,
-    // Layout constraints set by admin — editors cannot change these
     layout: v.object({
       width: v.optional(v.union(v.literal("narrow"), v.literal("medium"), v.literal("full"))),
       padding: v.optional(v.union(v.literal("none"), v.literal("sm"), v.literal("md"), v.literal("lg"))),
       background: v.optional(v.string()),
     }),
-    // Lock flag: if true, only admins can edit this block's structure
     isStructureLocked: v.boolean(),
     createdBy: v.id("users"),
     updatedBy: v.optional(v.id("users")),
-  })
-    .index("by_page", ["pageId"]),
+  }).index("by_page", ["pageId"]),
 
-  // ── Global Sections ─────────────────────────────────────
-  // Reusable sections (header, footer, CTA banners) shared across pages.
+  // ── Global Sections ──────────────────────────────────────
   globalSections: defineTable({
+    workspaceId: v.id("workspaces"),
     name: v.string(),
-    slug: v.string(), // e.g., "main-header", "default-footer"
+    slug: v.string(),
     type: v.union(v.literal("header"), v.literal("footer"), v.literal("cta"), v.literal("custom")),
     content: blockContent,
-    isDefault: v.boolean(), // If true, auto-applied to all pages without override
+    isDefault: v.boolean(),
     createdBy: v.id("users"),
     updatedBy: v.optional(v.id("users")),
   })
+    .index("by_workspace", ["workspaceId"])
     .index("by_slug", ["slug"])
     .index("by_type", ["type"])
     .index("by_default", ["isDefault"]),
 
-  // ── Media Library ───────────────────────────────────────
+  // ── Media Library ────────────────────────────────────────
   media: defineTable({
+    workspaceId: v.id("workspaces"),
     filename: v.string(),
     url: v.string(),
     mimeType: v.string(),
-    size: v.number(), // bytes
+    size: v.number(),
     alt: v.optional(v.string()),
     uploadedBy: v.id("users"),
   })
+    .index("by_workspace", ["workspaceId"])
     .index("by_uploader", ["uploadedBy"]),
 
-  // ── Audit Log ───────────────────────────────────────────
+  // ── Audit Log ────────────────────────────────────────────
   auditLog: defineTable({
+    workspaceId: v.optional(v.id("workspaces")),
     userId: v.id("users"),
-    action: v.string(), // e.g., "page.publish", "block.update", "user.create"
-    targetType: v.string(), // "page" | "block" | "globalSection" | "user"
+    action: v.string(),
+    targetType: v.string(),
     targetId: v.string(),
-    details: v.optional(v.string()), // JSON string of change details
+    details: v.optional(v.string()),
     timestamp: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_target", ["targetType", "targetId"])
     .index("by_timestamp", ["timestamp"]),
 
-  // ── API Keys (for external frontend connections) ────────
-  // Secure key+secret authentication for external apps.
-  // Only allows read access to published content.
+  // ── API Keys ─────────────────────────────────────────────
   apiKeys: defineTable({
-    name: v.string(), // "Marketing Website", "Mobile App"
-    key: v.string(), // Public key identifier
-    secretHash: v.string(), // Hashed secret (never stored plaintext)
-    permissions: v.array(v.string()), // ["pages:read", "blocks:read"]
-    allowedOrigins: v.optional(v.array(v.string())), // Domain restrictions
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    key: v.string(),
+    secretHash: v.string(),
+    permissions: v.array(v.string()),
+    allowedOrigins: v.optional(v.array(v.string())),
     isActive: v.boolean(),
     lastUsedAt: v.optional(v.number()),
-    expiresAt: v.optional(v.number()), // Optional expiration
+    expiresAt: v.optional(v.number()),
     createdBy: v.id("users"),
   })
+    .index("by_workspace", ["workspaceId"])
     .index("by_key", ["key"])
     .index("by_active", ["isActive"]),
 
-  // ── Projects (Portfolio Items) ───────────────────────────
+  // ── Projects ─────────────────────────────────────────────
   projects: defineTable({
-    slug: v.string(), // URL-friendly identifier
+    workspaceId: v.id("workspaces"),
+    slug: v.string(),
     title: v.string(),
     location: v.optional(v.string()),
     year: v.optional(v.string()),
-    category: v.optional(v.string()), // Residential, Commercial, etc.
+    category: v.optional(v.string()),
     description: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
-    // Extended project details
     brief: v.optional(v.string()),
     solution: v.optional(v.string()),
     outcome: v.optional(v.string()),
     size: v.optional(v.string()),
-    stage: v.optional(v.string()), // Completed, In Planning, Under Construction
+    stage: v.optional(v.string()),
     constraints: v.optional(v.string()),
     approach: v.optional(v.string()),
-    // Gallery images
     gallery: v.optional(v.array(v.string())),
-    // Status
     isPublished: v.boolean(),
-    order: v.optional(v.number()), // For custom ordering
+    order: v.optional(v.number()),
     createdBy: v.id("users"),
     updatedBy: v.optional(v.id("users")),
   })
+    .index("by_workspace", ["workspaceId"])
     .index("by_slug", ["slug"])
     .index("by_published", ["isPublished"])
+    .index("by_workspace_published", ["workspaceId", "isPublished"])
     .index("by_category", ["category"]),
 
   // ── Services ─────────────────────────────────────────────
   services: defineTable({
+    workspaceId: v.id("workspaces"),
     slug: v.string(),
     title: v.string(),
     description: v.optional(v.string()),
@@ -216,25 +218,31 @@ export default defineSchema({
     createdBy: v.id("users"),
     updatedBy: v.optional(v.id("users")),
   })
+    .index("by_workspace", ["workspaceId"])
     .index("by_slug", ["slug"])
-    .index("by_published", ["isPublished"]),
+    .index("by_published", ["isPublished"])
+    .index("by_workspace_published", ["workspaceId", "isPublished"]),
 
   // ── Testimonials ─────────────────────────────────────────
   testimonials: defineTable({
+    workspaceId: v.id("workspaces"),
     quote: v.string(),
     author: v.string(),
-    project: v.optional(v.string()), // Project name or reference
-    role: v.optional(v.string()), // Author's role/title
+    project: v.optional(v.string()),
+    role: v.optional(v.string()),
     avatar: v.optional(v.string()),
     isPublished: v.boolean(),
     order: v.optional(v.number()),
     createdBy: v.id("users"),
     updatedBy: v.optional(v.id("users")),
   })
-    .index("by_published", ["isPublished"]),
+    .index("by_workspace", ["workspaceId"])
+    .index("by_published", ["isPublished"])
+    .index("by_workspace_published", ["workspaceId", "isPublished"]),
 
   // ── FAQs ─────────────────────────────────────────────────
   faqs: defineTable({
+    workspaceId: v.id("workspaces"),
     question: v.string(),
     answer: v.string(),
     category: v.optional(v.string()),
@@ -243,12 +251,15 @@ export default defineSchema({
     createdBy: v.id("users"),
     updatedBy: v.optional(v.id("users")),
   })
+    .index("by_workspace", ["workspaceId"])
     .index("by_published", ["isPublished"])
+    .index("by_workspace_published", ["workspaceId", "isPublished"])
     .index("by_category", ["category"]),
 
   // ── Site Settings ────────────────────────────────────────
   siteSettings: defineTable({
-    key: v.string(), // "general", "social", "contact", etc.
+    workspaceId: v.id("workspaces"),
+    key: v.string(),
     siteName: v.optional(v.string()),
     tagline: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -266,5 +277,7 @@ export default defineSchema({
     })),
     updatedBy: v.optional(v.id("users")),
   })
-    .index("by_key", ["key"]),
+    .index("by_workspace", ["workspaceId"])
+    .index("by_key", ["key"])
+    .index("by_workspace_key", ["workspaceId", "key"]),
 });

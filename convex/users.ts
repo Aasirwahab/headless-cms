@@ -3,16 +3,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireAdmin, authenticateUser, logAudit } from "./auth";
 
-// ============================================================
-// USER MANAGEMENT
-// ============================================================
-// Simple token-based auth. In production, swap password hashing
-// for bcrypt via a Convex action that calls Node.js crypto.
-// For this implementation, we use a simple hash for demonstration.
-// ============================================================
-
 function simpleHash(input: string): string {
-  // In production: use a Convex action with bcrypt
   let hash = 0;
   for (let i = 0; i < input.length; i++) {
     const char = input.charCodeAt(i);
@@ -29,36 +20,58 @@ function generateToken(): string {
   );
 }
 
-// ── Seed the first admin user ─────────────────────────────
-export const seedAdmin = mutation({
+// ── Open Registration ─────────────────────────────────────
+// Anyone can register. A workspace is auto-created for the new user.
+// First account = admin, all subsequent = editor.
+export const register = mutation({
   args: {
     name: v.string(),
     email: v.string(),
     password: v.string(),
   },
   handler: async (ctx, args) => {
-    // Only allow if no users exist
-    const existingUsers = await ctx.db.query("users").first();
-    if (existingUsers) {
-      throw new ConvexError("Admin already exists. Use invite flow for new users.");
+    const email = args.email.trim().toLowerCase();
+    const name = args.name.trim();
+
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .unique();
+    if (existing) {
+      throw new ConvexError("An account with this email already exists");
     }
 
+    // Insert user first (workspaceId set after workspace is created)
     const userId = await ctx.db.insert("users", {
-      name: args.name,
-      email: args.email,
+      name,
+      email,
       passwordHash: simpleHash(args.password),
-      role: "admin",
+      role: "admin", // every new account is admin of their own workspace
       isActive: true,
     });
+
+    // Create a workspace owned by this user
+    const workspaceId = await ctx.db.insert("workspaces", {
+      name: `${name}'s Workspace`,
+      ownerId: userId,
+      createdAt: Date.now(),
+    });
+
+    // Link the user to their workspace
+    await ctx.db.patch(userId, { workspaceId });
 
     const token = generateToken();
     await ctx.db.insert("sessions", {
       userId,
       token,
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
     });
 
-    return { token, userId };
+    return {
+      token,
+      workspaceId,
+      user: { id: userId, name, email, role: "admin" as const },
+    };
   },
 });
 
@@ -69,22 +82,16 @@ export const login = mutation({
     password: v.string(),
   },
   handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
     const user = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .unique();
 
-    if (!user) {
+    if (!user) throw new ConvexError("Invalid email or password");
+    if (!user.isActive) throw new ConvexError("Account is deactivated");
+    if (user.passwordHash !== simpleHash(args.password))
       throw new ConvexError("Invalid email or password");
-    }
-
-    if (!user.isActive) {
-      throw new ConvexError("Account is deactivated");
-    }
-
-    if (user.passwordHash !== simpleHash(args.password)) {
-      throw new ConvexError("Invalid email or password");
-    }
 
     // Invalidate old sessions
     const oldSessions = await ctx.db
@@ -106,6 +113,7 @@ export const login = mutation({
 
     return {
       token,
+      workspaceId: user.workspaceId ?? null,
       user: {
         id: user._id,
         name: user.name,
@@ -129,7 +137,7 @@ export const me = query({
   },
 });
 
-// ── Create user (admin only) ───────────────────────────────
+// ── Create user (admin only, same workspace) ───────────────
 export const createUser = mutation({
   args: {
     token: v.string(),
@@ -140,57 +148,57 @@ export const createUser = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx, args.token);
+    if (!admin.workspaceId) throw new ConvexError("Workspace not found");
 
     const existing = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", args.email))
       .unique();
-    if (existing) {
-      throw new ConvexError("A user with this email already exists");
-    }
+    if (existing) throw new ConvexError("A user with this email already exists");
 
     const userId = await ctx.db.insert("users", {
       name: args.name,
-      email: args.email,
+      email: args.email.trim().toLowerCase(),
       passwordHash: simpleHash(args.password),
       role: args.role,
+      workspaceId: admin.workspaceId,
       isActive: true,
     });
 
     await logAudit(ctx, admin._id, "user.create", "user", userId, JSON.stringify({ role: args.role }));
-
     return userId;
   },
 });
 
-// ── List users (admin only) ────────────────────────────────
+// ── List users (admin only, same workspace) ────────────────
 export const listUsers = query({
   args: { token: v.optional(v.string()) },
   handler: async (ctx, args) => {
     if (!args.token) return [];
     try {
-      await requireAdmin(ctx, args.token);
+      const admin = await requireAdmin(ctx, args.token);
+      if (!admin.workspaceId) return [];
+      const users = await ctx.db
+        .query("users")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", admin.workspaceId!))
+        .collect();
+      return users.map((u) => ({
+        _id: u._id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        isActive: u.isActive,
+        lastLoginAt: u.lastLoginAt,
+      }));
     } catch {
       return [];
     }
-    const users = await ctx.db.query("users").collect();
-    return users.map((u) => ({
-      _id: u._id,
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      isActive: u.isActive,
-      lastLoginAt: u.lastLoginAt,
-    }));
   },
 });
 
 // ── Toggle user active status (admin only) ─────────────────
 export const toggleUserActive = mutation({
-  args: {
-    token: v.string(),
-    userId: v.id("users"),
-  },
+  args: { token: v.string(), userId: v.id("users") },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx, args.token);
     const user = await ctx.db.get(args.userId);

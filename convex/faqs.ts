@@ -4,49 +4,37 @@ import { ConvexError } from "convex/values";
 import { requireAdmin, requireEditor, logAudit } from "./auth";
 import { validateApiKey } from "./apiKeys";
 
-// ============================================================
-// FAQS — QUERIES & MUTATIONS
-// ============================================================
-
-// ── PUBLIC: List all published FAQs (API key auth) ─────────
 export const listWithApiKey = query({
-    args: {
-        apiKey: v.string(),
-        apiSecret: v.string(),
-        category: v.optional(v.string()),
-    },
+    args: { apiKey: v.string(), apiSecret: v.string(), workspaceId: v.id("workspaces"), category: v.optional(v.string()) },
     handler: async (ctx, args) => {
         await validateApiKey(ctx, args.apiKey, args.apiSecret, "pages:read");
-
         const faqs = await ctx.db
             .query("faqs")
-            .withIndex("by_published", (q) => q.eq("isPublished", true))
+            .withIndex("by_workspace_published", (q) =>
+                q.eq("workspaceId", args.workspaceId).eq("isPublished", true)
+            )
             .collect();
-
-        const filtered = args.category
-            ? faqs.filter((f) => f.category === args.category)
-            : faqs;
-
+        const filtered = args.category ? faqs.filter((f) => f.category === args.category) : faqs;
         return filtered.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
     },
 });
 
-// ── ADMIN: List all FAQs ───────────────────────────────────
 export const listAll = query({
     args: { token: v.optional(v.string()) },
     handler: async (ctx, args) => {
         if (!args.token) return [];
         try {
-            await requireEditor(ctx, args.token);
-        } catch {
-            return [];
-        }
-        const faqs = await ctx.db.query("faqs").collect();
-        return faqs.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+            const user = await requireEditor(ctx, args.token);
+            if (!user.workspaceId) return [];
+            const faqs = await ctx.db
+                .query("faqs")
+                .withIndex("by_workspace", (q) => q.eq("workspaceId", user.workspaceId!))
+                .collect();
+            return faqs.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+        } catch { return []; }
     },
 });
 
-// ── Create FAQ (admin only) ────────────────────────────────
 export const create = mutation({
     args: {
         token: v.string(),
@@ -57,8 +45,9 @@ export const create = mutation({
     },
     handler: async (ctx, args) => {
         const admin = await requireAdmin(ctx, args.token);
-
+        if (!admin.workspaceId) throw new ConvexError("Workspace not found");
         const faqId = await ctx.db.insert("faqs", {
+            workspaceId: admin.workspaceId,
             question: args.question,
             answer: args.answer,
             category: args.category,
@@ -66,13 +55,11 @@ export const create = mutation({
             isPublished: false,
             createdBy: admin._id,
         });
-
         await logAudit(ctx, admin._id, "faq.create", "faq", faqId);
         return faqId;
     },
 });
 
-// ── Update FAQ ─────────────────────────────────────────────
 export const update = mutation({
     args: {
         token: v.string(),
@@ -85,18 +72,12 @@ export const update = mutation({
     },
     handler: async (ctx, args) => {
         const user = await requireEditor(ctx, args.token);
-
         const { token, faqId, ...updates } = args;
-        await ctx.db.patch(args.faqId, {
-            ...updates,
-            updatedBy: user._id,
-        });
-
+        await ctx.db.patch(args.faqId, { ...updates, updatedBy: user._id });
         await logAudit(ctx, user._id, "faq.update", "faq", args.faqId);
     },
 });
 
-// ── Delete FAQ (admin only) ────────────────────────────────
 export const deleteFaq = mutation({
     args: { token: v.string(), faqId: v.id("faqs") },
     handler: async (ctx, args) => {

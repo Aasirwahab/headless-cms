@@ -1,83 +1,74 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireAdmin, logAudit } from "./auth";
+import { requireAdmin, requireEditor, logAudit } from "./auth";
 import { validateApiKey } from "./apiKeys";
 
-// ============================================================
-// SITE SETTINGS — QUERIES & MUTATIONS
-// ============================================================
-
-// ── PUBLIC: Get site settings (API key auth) ───────────────
 export const getWithApiKey = query({
-    args: {
-        apiKey: v.string(),
-        apiSecret: v.string(),
-        key: v.optional(v.string()),
-    },
+    args: { apiKey: v.string(), apiSecret: v.string(), workspaceId: v.id("workspaces"), key: v.optional(v.string()) },
     handler: async (ctx, args) => {
         await validateApiKey(ctx, args.apiKey, args.apiSecret, "pages:read");
-
         const settingsKey = args.key ?? "general";
-        const settings = await ctx.db
+        const allSettings = await ctx.db
             .query("siteSettings")
-            .withIndex("by_key", (q) => q.eq("key", settingsKey))
+            .withIndex("by_workspace_key", (q) =>
+                q.eq("workspaceId", args.workspaceId).eq("key", settingsKey)
+            )
             .unique();
-
-        return settings ?? null;
+        return allSettings ?? null;
     },
 });
 
-// ── PUBLIC: Get all settings (API key auth) ────────────────
 export const getAllWithApiKey = query({
-    args: {
-        apiKey: v.string(),
-        apiSecret: v.string(),
-    },
+    args: { apiKey: v.string(), apiSecret: v.string(), workspaceId: v.id("workspaces") },
     handler: async (ctx, args) => {
         await validateApiKey(ctx, args.apiKey, args.apiSecret, "pages:read");
-
-        const allSettings = await ctx.db.query("siteSettings").collect();
-
-        // Convert to key-value object for easier consumption
+        const allSettings = await ctx.db
+            .query("siteSettings")
+            .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+            .collect();
         const result: Record<string, any> = {};
-        for (const setting of allSettings) {
-            result[setting.key] = setting;
-        }
+        for (const s of allSettings) result[s.key] = s;
         return result;
     },
 });
 
-// ── ADMIN: Get settings ────────────────────────────────────
 export const get = query({
     args: { token: v.optional(v.string()), key: v.optional(v.string()) },
     handler: async (ctx, args) => {
         if (!args.token) return null;
-
-        const settingsKey = args.key ?? "general";
-        return await ctx.db
-            .query("siteSettings")
-            .withIndex("by_key", (q) => q.eq("key", settingsKey))
-            .unique();
+        try {
+            const user = await requireEditor(ctx, args.token);
+            if (!user.workspaceId) return null;
+            const settingsKey = args.key ?? "general";
+            return await ctx.db
+                .query("siteSettings")
+                .withIndex("by_workspace_key", (q) =>
+                    q.eq("workspaceId", user.workspaceId!).eq("key", settingsKey)
+                )
+                .unique();
+        } catch { return null; }
     },
 });
 
-// ── ADMIN: Get all settings ────────────────────────────────
 export const getAll = query({
     args: { token: v.optional(v.string()) },
     handler: async (ctx, args) => {
         if (!args.token) return {};
-
-        const allSettings = await ctx.db.query("siteSettings").collect();
-        const result: Record<string, any> = {};
-        for (const setting of allSettings) {
-            result[setting.key] = setting;
-        }
-        return result;
+        try {
+            const user = await requireEditor(ctx, args.token);
+            if (!user.workspaceId) return {};
+            const allSettings = await ctx.db
+                .query("siteSettings")
+                .withIndex("by_workspace", (q) => q.eq("workspaceId", user.workspaceId!))
+                .collect();
+            const result: Record<string, any> = {};
+            for (const s of allSettings) result[s.key] = s;
+            return result;
+        } catch { return {}; }
     },
 });
 
-// ── Update or create settings (admin only) ─────────────────
 export const upsert = mutation({
     args: {
         token: v.string(),
@@ -100,24 +91,25 @@ export const upsert = mutation({
     },
     handler: async (ctx, args) => {
         const admin = await requireAdmin(ctx, args.token);
+        if (!admin.workspaceId) throw new ConvexError("Workspace not found");
 
         const existing = await ctx.db
             .query("siteSettings")
-            .withIndex("by_key", (q) => q.eq("key", args.key))
+            .withIndex("by_workspace_key", (q) =>
+                q.eq("workspaceId", admin.workspaceId!).eq("key", args.key)
+            )
             .unique();
 
         const { token, ...data } = args;
 
         if (existing) {
-            await ctx.db.patch(existing._id, {
-                ...data,
-                updatedBy: admin._id,
-            });
+            await ctx.db.patch(existing._id, { ...data, workspaceId: admin.workspaceId, updatedBy: admin._id });
             await logAudit(ctx, admin._id, "settings.update", "siteSettings", existing._id);
             return existing._id;
         } else {
             const settingsId = await ctx.db.insert("siteSettings", {
                 ...data,
+                workspaceId: admin.workspaceId,
                 updatedBy: admin._id,
             });
             await logAudit(ctx, admin._id, "settings.create", "siteSettings", settingsId);

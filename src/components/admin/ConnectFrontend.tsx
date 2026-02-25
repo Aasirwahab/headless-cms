@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export function ConnectFrontend() {
-    const { token, isAdmin } = useAuth();
+    const { token, isAdmin, workspaceId } = useAuth();
     const apiKeys = useQuery(api.apiKeys.list, token ? { token } : "skip");
 
     const createKey = useMutation(api.apiKeys.create);
@@ -55,6 +55,7 @@ export function ConnectFrontend() {
     }
 
     function getCodeSnippet(key: string, secret: string) {
+        const wsId = workspaceId ?? "YOUR_WORKSPACE_ID";
         if (selectedFramework === "nextjs") {
             return `// 1. Install Convex
 // npm install convex
@@ -63,27 +64,31 @@ export function ConnectFrontend() {
 NEXT_PUBLIC_CONVEX_URL=${convexUrl}
 NEXT_PUBLIC_CMS_API_KEY=${key}
 NEXT_PUBLIC_CMS_API_SECRET=${secret}
+NEXT_PUBLIC_CMS_WORKSPACE_ID=${wsId}
 
 // 3. Create lib/cms.ts
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 
 const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+const CMS_ARGS = {
+  apiKey: process.env.NEXT_PUBLIC_CMS_API_KEY!,
+  apiSecret: process.env.NEXT_PUBLIC_CMS_API_SECRET!,
+  workspaceId: process.env.NEXT_PUBLIC_CMS_WORKSPACE_ID! as any,
+};
 
-export async function getPage(slug: string) {
-  return client.query(api.pages.getBySlugWithApiKey, {
-    slug,
-    apiKey: process.env.NEXT_PUBLIC_CMS_API_KEY!,
-    apiSecret: process.env.NEXT_PUBLIC_CMS_API_SECRET!,
-  });
-}
+export const getProjects = () => client.query(api.projects.listWithApiKey, CMS_ARGS);
+export const getServices = () => client.query(api.services.listWithApiKey, CMS_ARGS);
+export const getTestimonials = () => client.query(api.testimonials.listWithApiKey, CMS_ARGS);
+export const getFaqs = () => client.query(api.faqs.listWithApiKey, CMS_ARGS);
+export const getSettings = () => client.query(api.settings.getAllWithApiKey, CMS_ARGS);
 
-// 4. Use in your component
-import { getPage } from "@/lib/cms";
+// 4. Use in any page
+import { getProjects } from "@/lib/cms";
 
-export default async function AboutPage() {
-  const page = await getPage("about");
-  return <h1>{page?.title}</h1>;
+export default async function WorkPage() {
+  const projects = await getProjects();
+  return projects.map(p => <div key={p._id}>{p.title}</div>);
 }`;
         }
 
@@ -182,14 +187,19 @@ fetch("${convexUrl}/api/query", {
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                         <span className="text-blue-600">🔗</span>
                     </div>
-                    <div>
-                        <h3 className="font-medium text-blue-900">Your Convex URL</h3>
-                        <code className="text-sm text-blue-700 bg-blue-100 px-2 py-1 rounded mt-1 inline-block font-mono">
-                            {convexUrl}
-                        </code>
-                        <p className="text-sm text-blue-600 mt-2">
-                            All frontends need this URL plus an API key to connect.
-                        </p>
+                    <div className="w-full">
+                        <h3 className="font-medium text-blue-900">Connection Details</h3>
+                        <div className="mt-2 space-y-2">
+                            <div>
+                                <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Convex URL</p>
+                                <code className="text-sm text-blue-700 bg-blue-100 px-2 py-1 rounded mt-1 inline-block font-mono break-all">{convexUrl}</code>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Workspace ID</p>
+                                <code className="text-sm text-blue-700 bg-blue-100 px-2 py-1 rounded mt-1 inline-block font-mono break-all">{workspaceId ?? "—"}</code>
+                            </div>
+                        </div>
+                        <p className="text-sm text-blue-600 mt-2">Copy both values into your frontend <code>.env.local</code>.</p>
                     </div>
                 </div>
             </div>
@@ -216,8 +226,8 @@ fetch("${convexUrl}/api/query", {
                                 <td className="px-4 py-3">
                                     <span
                                         className={`text-xs font-medium px-2 py-0.5 rounded-full ${key.isActive
-                                                ? "bg-green-100 text-green-800"
-                                                : "bg-red-100 text-red-800"
+                                            ? "bg-green-100 text-green-800"
+                                            : "bg-red-100 text-red-800"
                                             }`}
                                     >
                                         {key.isActive ? "Active" : "Revoked"}
@@ -371,8 +381,8 @@ fetch("${convexUrl}/api/query", {
                                         key={fw}
                                         onClick={() => setSelectedFramework(fw)}
                                         className={`px-4 py-2 text-sm rounded-lg transition-colors ${selectedFramework === fw
-                                                ? "bg-gray-900 text-white"
-                                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                            ? "bg-gray-900 text-white"
+                                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                                             }`}
                                     >
                                         {fw === "nextjs" ? "Next.js" : fw === "react" ? "React" : "Vanilla JS"}
