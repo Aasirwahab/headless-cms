@@ -1,0 +1,5 @@
+{
+    "buildCommand": "npx convex deploy --cmd 'pnpm run build'",
+    "framework": "nextjs",
+    "installCommand": "pnpm install"
+}
