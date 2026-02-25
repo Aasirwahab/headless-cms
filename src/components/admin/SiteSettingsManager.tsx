@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export function SiteSettingsManager() {
     const { token, isAdmin } = useAuth();
@@ -49,9 +50,9 @@ export function SiteSettingsManager() {
                 key: "general",
                 ...form,
             });
-            alert("Settings saved successfully!");
+            toast.success("Settings saved successfully!");
         } catch (err: any) {
-            alert(err.data ?? err.message);
+            toast.error(err.data ?? err.message);
         } finally {
             setIsSaving(false);
         }

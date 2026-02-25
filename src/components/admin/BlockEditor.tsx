@@ -10,10 +10,11 @@
 //   - Structure-locked blocks show a lock icon for editors
 // ============================================================
 
-import { useState } from "react";
+import { useState, useId } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 import type { Block, BlockContent, BlockLayout } from "@/types/cms";
 
 type BlockEditorProps = {
@@ -37,8 +38,9 @@ export function BlockEditor({ block, onDelete, onDuplicate }: BlockEditorProps) 
     setSaving(true);
     try {
       await updateContent({ token, blockId: block._id, content });
+      toast.success(`${typeLabel} content saved.`);
     } catch (err: any) {
-      alert(err.data ?? err.message);
+      toast.error(err.data ?? err.message);
     }
     setSaving(false);
   }
@@ -48,8 +50,9 @@ export function BlockEditor({ block, onDelete, onDuplicate }: BlockEditorProps) 
     setSaving(true);
     try {
       await updateLayout({ token, blockId: block._id, layout });
+      toast.success(`${typeLabel} layout updated.`);
     } catch (err: any) {
-      alert(err.data ?? err.message);
+      toast.error(err.data ?? err.message);
     }
     setSaving(false);
   }
@@ -201,26 +204,40 @@ function HeroEditor({
   content: Extract<BlockContent, { type: "hero" }>;
   onChange: (c: Extract<BlockContent, { type: "hero" }>) => void;
 }) {
+  const headingId = useId();
+  const subheadingId = useId();
+  const bgImgId = useId();
+  const ctaTextId = useId();
+  const ctaLinkId = useId();
+  const alignId = useId();
+
   return (
     <div className="space-y-3">
-      <Field label="Heading">
+      <Field label="Heading" id={headingId}>
         <input
+          id={headingId}
           type="text"
+          title="Heading"
           value={content.heading}
           onChange={(e) => onChange({ ...content, heading: e.target.value })}
           className="w-full border rounded-lg px-3 py-2 text-sm"
+          placeholder="Hero Heading"
         />
       </Field>
-      <Field label="Subheading">
+      <Field label="Subheading" id={subheadingId}>
         <input
+          id={subheadingId}
           type="text"
+          title="Subheading"
           value={content.subheading ?? ""}
           onChange={(e) => onChange({ ...content, subheading: e.target.value })}
           className="w-full border rounded-lg px-3 py-2 text-sm"
+          placeholder="Optional subheading"
         />
       </Field>
-      <Field label="Background Image URL">
+      <Field label="Background Image URL" id={bgImgId}>
         <input
+          id={bgImgId}
           type="text"
           value={content.backgroundImage ?? ""}
           onChange={(e) => onChange({ ...content, backgroundImage: e.target.value })}
@@ -229,25 +246,33 @@ function HeroEditor({
         />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="CTA Text">
+        <Field label="CTA Text" id={ctaTextId}>
           <input
+            id={ctaTextId}
             type="text"
+            title="CTA Text"
             value={content.ctaText ?? ""}
             onChange={(e) => onChange({ ...content, ctaText: e.target.value })}
             className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="e.g. Learn More"
           />
         </Field>
-        <Field label="CTA Link">
+        <Field label="CTA Link" id={ctaLinkId}>
           <input
+            id={ctaLinkId}
             type="text"
+            title="CTA Link"
             value={content.ctaLink ?? ""}
             onChange={(e) => onChange({ ...content, ctaLink: e.target.value })}
             className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="/projects"
           />
         </Field>
       </div>
-      <Field label="Alignment">
+      <Field label="Alignment" id={alignId}>
         <select
+          id={alignId}
+          title="Alignment"
           value={content.alignment ?? "center"}
           onChange={(e) => onChange({ ...content, alignment: e.target.value as any })}
           className="border rounded-lg px-3 py-2 text-sm"
@@ -270,15 +295,19 @@ function TextEditor({
 }) {
   const maxLen = content.maxLength;
   const currentLen = content.body.length;
+  const bodyId = useId();
 
   return (
     <div className="space-y-3">
-      <Field label="Body">
+      <Field label="Body" id={bodyId}>
         <textarea
+          id={bodyId}
+          title="Body"
           value={content.body}
           onChange={(e) => onChange({ ...content, body: e.target.value })}
           rows={6}
           className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+          placeholder="Write your content here..."
           maxLength={maxLen}
         />
         {maxLen && (
@@ -298,10 +327,15 @@ function ImageEditor({
   content: Extract<BlockContent, { type: "image" }>;
   onChange: (c: Extract<BlockContent, { type: "image" }>) => void;
 }) {
+  const srcId = useId();
+  const altId = useId();
+  const captionId = useId();
+
   return (
     <div className="space-y-3">
-      <Field label="Image URL">
+      <Field label="Image URL" id={srcId}>
         <input
+          id={srcId}
           type="text"
           value={content.src}
           onChange={(e) => onChange({ ...content, src: e.target.value })}
@@ -316,20 +350,26 @@ function ImageEditor({
           className="max-h-32 rounded-lg border object-cover"
         />
       )}
-      <Field label="Alt Text">
+      <Field label="Alt Text" id={altId}>
         <input
+          id={altId}
           type="text"
+          title="Alt Text"
           value={content.alt}
           onChange={(e) => onChange({ ...content, alt: e.target.value })}
           className="w-full border rounded-lg px-3 py-2 text-sm"
+          placeholder="Descriptive text for accessibility"
         />
       </Field>
-      <Field label="Caption (optional)">
+      <Field label="Caption (optional)" id={captionId}>
         <input
+          id={captionId}
           type="text"
+          title="Caption"
           value={content.caption ?? ""}
           onChange={(e) => onChange({ ...content, caption: e.target.value })}
           className="w-full border rounded-lg px-3 py-2 text-sm"
+          placeholder="Optional image caption"
         />
       </Field>
     </div>
@@ -343,44 +383,64 @@ function CTAEditor({
   content: Extract<BlockContent, { type: "cta" }>;
   onChange: (c: Extract<BlockContent, { type: "cta" }>) => void;
 }) {
+  const headingId = useId();
+  const descId = useId();
+  const btnTextId = useId();
+  const btnLinkId = useId();
+  const variantId = useId();
+
   return (
     <div className="space-y-3">
-      <Field label="Heading">
+      <Field label="Heading" id={headingId}>
         <input
+          id={headingId}
           type="text"
+          title="Heading"
           value={content.heading ?? ""}
           onChange={(e) => onChange({ ...content, heading: e.target.value })}
           className="w-full border rounded-lg px-3 py-2 text-sm"
+          placeholder="CTA Heading"
         />
       </Field>
-      <Field label="Description">
+      <Field label="Description" id={descId}>
         <textarea
+          id={descId}
+          title="Description"
           value={content.description ?? ""}
           onChange={(e) => onChange({ ...content, description: e.target.value })}
           rows={2}
           className="w-full border rounded-lg px-3 py-2 text-sm"
+          placeholder="CTA Description"
         />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Button Text">
+        <Field label="Button Text" id={btnTextId}>
           <input
+            id={btnTextId}
             type="text"
+            title="Button Text"
             value={content.buttonText}
             onChange={(e) => onChange({ ...content, buttonText: e.target.value })}
             className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Button label"
           />
         </Field>
-        <Field label="Button Link">
+        <Field label="Button Link" id={btnLinkId}>
           <input
+            id={btnLinkId}
             type="text"
+            title="Button Link"
             value={content.buttonLink}
             onChange={(e) => onChange({ ...content, buttonLink: e.target.value })}
             className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="/contact"
           />
         </Field>
       </div>
-      <Field label="Variant">
+      <Field label="Variant" id={variantId}>
         <select
+          id={variantId}
+          title="Variant"
           value={content.variant ?? "primary"}
           onChange={(e) => onChange({ ...content, variant: e.target.value as any })}
           className="border rounded-lg px-3 py-2 text-sm"
@@ -395,13 +455,16 @@ function CTAEditor({
 }
 
 // ── Shared Field wrapper ───────────────────────────────────
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, id, children }: { label: string; id?: string; children: React.ReactNode }) {
   return (
-    <label className="block">
-      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+    <div className="block">
+      <label
+        htmlFor={id}
+        className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1"
+      >
         {label}
-      </span>
-      <div className="mt-1">{children}</div>
-    </label>
+      </label>
+      {children}
+    </div>
   );
 }

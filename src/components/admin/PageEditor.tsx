@@ -15,6 +15,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 import { BlockEditor } from "./BlockEditor";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { BlockContent } from "@/types/cms";
@@ -103,17 +104,22 @@ export function PageEditor({ pageId, onBack }: PageEditorProps) {
 
   async function handleSaveMeta() {
     if (!token || !metaForm) return;
-    await updateMeta({
-      token,
-      pageId,
-      title: metaForm.title,
-      slug: metaForm.slug,
-      seo: {
-        title: metaForm.seoTitle,
-        description: metaForm.seoDescription,
-        ogImage: metaForm.ogImage,
-      },
-    });
+    try {
+      await updateMeta({
+        token,
+        pageId,
+        title: metaForm.title,
+        slug: metaForm.slug,
+        seo: {
+          title: metaForm.seoTitle,
+          description: metaForm.seoDescription,
+          ogImage: metaForm.ogImage,
+        },
+      });
+      toast.success("Page settings saved.");
+    } catch (err: any) {
+      toast.error(err.data ?? err.message);
+    }
   }
 
   async function handleAddBlock(type: string) {

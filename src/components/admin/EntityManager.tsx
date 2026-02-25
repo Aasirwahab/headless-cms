@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { toast } from "sonner";
 import type { UserRole } from "@/types/cms";
 
 type EntityField = {
@@ -41,9 +42,10 @@ export function EntityManager<T extends { _id: any }>({
         setIsSaving(true);
         try {
             await onSave(editingItem);
+            toast.success(`${title.slice(0, -1)} saved successfully!`);
             setEditingItem(null);
         } catch (err: any) {
-            alert(err.data ?? err.message);
+            toast.error(err.data ?? err.message);
         } finally {
             setIsSaving(false);
         }
@@ -91,9 +93,14 @@ export function EntityManager<T extends { _id: any }>({
                                         </button>
                                         {isAdmin && (
                                             <button
-                                                onClick={() => {
+                                                onClick={async () => {
                                                     if (confirm(`Permanently delete this ${title.slice(0, -1).toLowerCase()}?`)) {
-                                                        onDelete(item._id);
+                                                        try {
+                                                            await onDelete(item._id);
+                                                            toast.success(`${title.slice(0, -1)} deleted.`);
+                                                        } catch (err: any) {
+                                                            toast.error(err.data ?? err.message);
+                                                        }
                                                     }
                                                 }}
                                                 className="text-xs px-3 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors"

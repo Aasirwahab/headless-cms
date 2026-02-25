@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@/hooks/useAuth";
 import { PageEditor } from "./PageEditor";
@@ -213,7 +214,14 @@ export function Dashboard() {
                           </button>
                           {isAdmin && page.status !== "archived" && (
                             <button
-                              onClick={() => archivePage({ token: token!, pageId: page._id })}
+                              onClick={async () => {
+                                try {
+                                  await archivePage({ token: token!, pageId: page._id });
+                                  toast.success("Page archived.");
+                                } catch (err: any) {
+                                  toast.error(err.data ?? err.message);
+                                }
+                              }}
                               className="text-xs px-3 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                             >
                               Archive
@@ -221,9 +229,14 @@ export function Dashboard() {
                           )}
                           {isAdmin && (
                             <button
-                              onClick={() => {
+                              onClick={async () => {
                                 if (confirm("Permanently delete this page and all its blocks?")) {
-                                  deletePage({ token: token!, pageId: page._id });
+                                  try {
+                                    await deletePage({ token: token!, pageId: page._id });
+                                    toast.success("Page deleted.");
+                                  } catch (err: any) {
+                                    toast.error(err.data ?? err.message);
+                                  }
                                 }
                               }}
                               className="text-xs px-3 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
@@ -270,10 +283,11 @@ export function Dashboard() {
               { key: "isPublished", label: "Is Published", type: "checkbox" },
             ]}
             onSave={async (data) => {
-              if (data._id) {
-                await updateProject({ token: token!, projectId: data._id, ...data });
+              const { _id, _creationTime, ...fields } = data;
+              if (_id) {
+                await updateProject({ token: token!, projectId: _id, ...fields });
               } else {
-                await createProject({ token: token!, ...data });
+                await createProject({ token: token!, ...fields });
               }
             }}
             onDelete={async (id) => {
@@ -303,10 +317,11 @@ export function Dashboard() {
               { key: "isPublished", label: "Is Published", type: "checkbox" },
             ]}
             onSave={async (data) => {
-              if (data._id) {
-                await updateService({ token: token!, serviceId: data._id, ...data });
+              const { _id, _creationTime, ...fields } = data;
+              if (_id) {
+                await updateService({ token: token!, serviceId: _id, ...fields });
               } else {
-                await createService({ token: token!, ...data });
+                await createService({ token: token!, ...fields });
               }
             }}
             onDelete={async (id) => {
@@ -335,10 +350,11 @@ export function Dashboard() {
               { key: "isPublished", label: "Is Published", type: "checkbox" },
             ]}
             onSave={async (data) => {
-              if (data._id) {
-                await updateTestimonial({ token: token!, testimonialId: data._id, ...data });
+              const { _id, _creationTime, ...fields } = data;
+              if (_id) {
+                await updateTestimonial({ token: token!, testimonialId: _id, ...fields });
               } else {
-                await createTestimonial({ token: token!, ...data });
+                await createTestimonial({ token: token!, ...fields });
               }
             }}
             onDelete={async (id) => {
@@ -366,10 +382,11 @@ export function Dashboard() {
               { key: "isPublished", label: "Is Published", type: "checkbox" },
             ]}
             onSave={async (data) => {
-              if (data._id) {
-                await updateFAQ({ token: token!, faqId: data._id, ...data });
+              const { _id, _creationTime, ...fields } = data;
+              if (_id) {
+                await updateFAQ({ token: token!, faqId: _id, ...fields });
               } else {
-                await createFAQ({ token: token!, ...data });
+                await createFAQ({ token: token!, ...fields });
               }
             }}
             onDelete={async (id) => {
