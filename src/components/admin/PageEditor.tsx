@@ -270,7 +270,7 @@ export function PageEditor({ pageId, onBack }: PageEditorProps) {
           </div>
         </div>
 
-        {page.blocks.map((block, index) => (
+        {page.blocks.filter((b): b is NonNullable<typeof b> => b !== null).map((block, index) => (
           <div key={block._id} className="relative">
             {/* Reorder buttons */}
             {isAdmin && (
